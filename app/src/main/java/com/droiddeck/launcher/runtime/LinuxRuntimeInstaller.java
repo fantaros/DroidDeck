@@ -34,8 +34,9 @@ import java.util.concurrent.CountDownLatch;
 public final class LinuxRuntimeInstaller {
     private static final String TAG = "LinuxRuntimeInstaller";
 
-    public static final String CATALOG_URL =
-            "https://raw.githubusercontent.com/Droid-Deck/DroidDeck-Components/main/linuxfs-ubuntu.json";
+    // The release catalog now ships inside the APK as a local asset instead of being
+    // fetched from https://raw.githubusercontent.com/Droid-Deck/DroidDeck-Components/main/linuxfs-ubuntu.json
+    public static final String CATALOG_ASSET = "linuxfs-ubuntu.json";
 
     private static final String VERSION_FILE = ".version";
 
@@ -88,20 +89,21 @@ public final class LinuxRuntimeInstaller {
         return v == null ? null : v.trim();
     }
 
-    private static String catalogUrl() {
-        if (!com.droiddeck.launcher.BuildConfig.DEBUG) return CATALOG_URL;
-        try {
-            Object value = Class.forName("android.os.SystemProperties").getMethod("get", String.class)
-                    .invoke(null, "debug.droiddeck.linuxfs");
-            if (value instanceof String && ((String) value).startsWith("http")) return (String) value;
-        } catch (ReflectiveOperationException e) {
-            Log.w(TAG, "catalog override: " + e);
+    private static String catalogBody(Context context) {
+        try (InputStream in = context.getAssets().open(CATALOG_ASSET)) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Log.w(TAG, "catalog asset: " + e);
+            return null;
         }
-        return CATALOG_URL;
     }
 
-    public static Release fetchRelease() {
-        String body = Downloader.downloadString(catalogUrl());
+    public static Release fetchRelease(Context context) {
+        String body = catalogBody(context.getApplicationContext());
         if (body == null || body.isEmpty()) return null;
         try {
             JSONObject json = new JSONObject(body);
